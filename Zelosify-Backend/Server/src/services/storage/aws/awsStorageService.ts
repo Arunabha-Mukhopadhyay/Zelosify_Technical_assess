@@ -5,6 +5,8 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   ListObjectsV2Command,
+  GetBucketCorsCommand,
+  PutBucketCorsCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Readable } from "stream";
@@ -25,6 +27,7 @@ export class AwsStorageService extends StorageService {
     const accessKeyId = process.env.S3_ACCESS_KEY_ID;
     const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY;
     const bucketName = process.env.S3_BUCKET_NAME;
+    //console.log(accessKeyId);
 
     if (!region || !accessKeyId || !secretAccessKey || !bucketName) {
       throw new Error("Missing required AWS S3 configuration");
@@ -49,6 +52,34 @@ export class AwsStorageService extends StorageService {
       endpoint: `https://s3.${region}.amazonaws.com`,
       hasCredentials: !!accessKeyId && !!secretAccessKey,
     });
+  }
+
+  async configureBucketCors(allowedOrigins: string[]) {
+    try {
+      const command = new GetBucketCorsCommand({ Bucket: this.bucket });
+      const existingCors = await this.s3Client.send(command);
+      console.log("[AWS S3] Existing bucket CORS:", existingCors.CORSRules);
+    } catch (error: unknown) {
+      console.warn("[AWS S3] No existing CORS configuration found or access denied.");
+    }
+
+    const corsRules = [
+      {
+        AllowedOrigins: allowedOrigins,
+        AllowedMethods: ["GET", "PUT", "POST", "DELETE", "HEAD"],
+        AllowedHeaders: ["*"],
+        ExposeHeaders: ["ETag", "x-amz-request-id", "x-amz-id-2"],
+        MaxAgeSeconds: 300,
+      },
+    ];
+
+    const putCommand = new PutBucketCorsCommand({
+      Bucket: this.bucket,
+      CORSConfiguration: { CORSRules: corsRules },
+    });
+
+    await this.s3Client.send(putCommand);
+    console.log("[AWS S3] Bucket CORS updated successfully");
   }
 
   async getObjectURL(key: string): Promise<string> {
@@ -133,7 +164,10 @@ export class AwsStorageService extends StorageService {
     }
   }
 
-  async getUploadURL(key: string): Promise<string> {
+  async getUploadURL(
+    key: string,
+    contentType = "application/pdf"
+  ): Promise<string> {
     try {
       console.log("[AWS S3] Generating upload URL for:", {
         bucket: this.bucket,
@@ -144,7 +178,7 @@ export class AwsStorageService extends StorageService {
       const command = new PutObjectCommand({
         Bucket: this.bucket,
         Key: key,
-        ContentType: "application/pdf",
+        ContentType: contentType,
       });
 
       const url = await getSignedUrl(this.s3Client, command, {
