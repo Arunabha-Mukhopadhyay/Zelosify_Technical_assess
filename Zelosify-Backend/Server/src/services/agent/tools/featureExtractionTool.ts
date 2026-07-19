@@ -19,7 +19,7 @@ export interface ExtractedFeatures {
 }
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const MODEL = "llama3-groq-8b-8192-tool-use-preview";
+const MODEL = "llama-3.1-8b-instant";
 
 export async function featureExtractionTool(
   input: FeatureExtractionInput

@@ -2,6 +2,7 @@ import prisma from '../../config/prisma/prisma.js';
 import { logger } from '../../utils/logger/structuredLogger.js';
 import { runAgentOrchestrator } from './agentOrchestrator.js';
 import { validateAgentOutput } from './schemaValidator.js';
+import { resumeParsingTool, primeParseCache } from './tools/resumeParsingTool.js';
 
 const AGENT_VERSION = '1.0.0';
 
@@ -88,6 +89,21 @@ export async function triggerRecommendationForProfile(
     });
 
     const parsingStart = Date.now();
+
+    // ── PRE-WARM PARSE CACHE ──────────────────────────────────────────────────
+    // Parse the PDF NOW and prime the cache so the agent's resumeParsingTool
+    // call gets an instant cache hit (eliminates 2-3s S3 re-download).
+    try {
+      const preParsed = await resumeParsingTool(profile.s3Key);
+      primeParseCache(profile.s3Key, preParsed);
+      logger.info('[RecommendationService] Parse cache pre-warmed', {
+        profileId, s3Key: profile.s3Key, ms: Date.now() - parsingStart,
+      });
+    } catch (parseErr) {
+      logger.warn('[RecommendationService] Pre-warm failed — agent will parse directly', {
+        profileId, error: parseErr instanceof Error ? parseErr.message : String(parseErr),
+      });
+    }
 
     // Run the agent orchestrator (full LLM tool-calling pipeline)
     const rawOutput = await runAgentOrchestrator({

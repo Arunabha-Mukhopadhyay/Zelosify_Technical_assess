@@ -24,22 +24,22 @@ async function seedOpenings() {
     const hiringManager = await prisma.user.upsert({
       where: {
         email_provider: {
-          email: "lucius.fox@brucewaynecorp.com",
+          email: "hiring.manager@brucewaynecorp.com",
           provider: "KEYCLOAK",
         },
       },
       update: {
-        firstName: "Lucius",
-        lastName: "Fox",
+        firstName: "Hiring",
+        lastName: "Manager",
         role: "HIRING_MANAGER",
         tenantId: tenant.tenantId,
         department: "Technology",
       },
       create: {
-        username: "lucius.fox",
-        email: "lucius.fox@brucewaynecorp.com",
-        firstName: "Lucius",
-        lastName: "Fox",
+        username: "hiring.manager",
+        email: "hiring.manager@brucewaynecorp.com",
+        firstName: "Hiring",
+        lastName: "Manager",
         role: "HIRING_MANAGER",
         tenantId: tenant.tenantId,
         department: "Technology",
@@ -197,7 +197,7 @@ async function cleanupLegacySeedTenant() {
   await prisma.user.deleteMany({
     where: {
       tenantId: LEGACY_SEED_TENANT_ID,
-      email: "lucius.fox@brucewaynecorp.com",
+      email: "hiring.manager@brucewaynecorp.com",
     },
   });
 

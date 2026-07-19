@@ -13,6 +13,33 @@ export interface ParsedResume {
   rawText: string;
 }
 
+// ─── In-memory Parse Cache (skips S3 re-download during AI processing) ─────────
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const MAX_CACHE_SIZE = 50;
+interface CacheEntry { result: ParsedResume; expiresAt: number; }
+const parseCache = new Map<string, CacheEntry>();
+
+function getCached(s3Key: string): ParsedResume | null {
+  const entry = parseCache.get(s3Key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) { parseCache.delete(s3Key); return null; }
+  return entry.result;
+}
+
+function setCache(s3Key: string, result: ParsedResume): void {
+  if (parseCache.size >= MAX_CACHE_SIZE) {
+    const firstKey = parseCache.keys().next().value;
+    if (firstKey) parseCache.delete(firstKey);
+  }
+  parseCache.set(s3Key, { result, expiresAt: Date.now() + CACHE_TTL_MS });
+}
+
+/** Pre-warm the cache at submit time so the agent skips S3 re-download. */
+export function primeParseCache(s3Key: string, result: ParsedResume): void {
+  setCache(s3Key, result);
+  logger.info("[ParseCache] Pre-warmed cache", { s3Key });
+}
+
 // ─── Prompt Injection Sanitizer ───────────────────────────────────────────────
 // Strips content that could manipulate LLM system prompts
 function sanitizeResumeText(text: string): string {
@@ -228,6 +255,15 @@ export async function resumeParsingTool(s3Key: string): Promise<ParsedResume> {
   logger.info("[ResumeParsingTool] Starting", { s3Key });
   const start = Date.now();
 
+  // ✅ Cache hit — skip expensive S3 download
+  const cached = getCached(s3Key);
+  if (cached) {
+    logger.info("[ResumeParsingTool] Cache hit — skipping S3 download", {
+      s3Key, latencyMs: Date.now() - start,
+    });
+    return cached;
+  }
+
   const buffer = await downloadFromS3(s3Key);
   logger.info("[ResumeParsingTool] Downloaded from S3", {
     s3Key,
@@ -248,6 +284,10 @@ export async function resumeParsingTool(s3Key: string): Promise<ParsedResume> {
 
   const sanitized = sanitizeResumeText(rawText);
   const structured = heuristicStructure(sanitized);
+  const result = { ...structured, rawText: sanitized };
+
+  // Populate cache for any subsequent calls
+  setCache(s3Key, result);
 
   logger.info("[ResumeParsingTool] Done", {
     s3Key,
@@ -256,5 +296,5 @@ export async function resumeParsingTool(s3Key: string): Promise<ParsedResume> {
     latencyMs: Date.now() - start,
   });
 
-  return { ...structured, rawText: sanitized };
+  return result;
 }

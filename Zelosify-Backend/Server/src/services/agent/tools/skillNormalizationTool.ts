@@ -2,7 +2,7 @@ import axios from "axios";
 import { logger } from "../../../utils/logger/structuredLogger.js";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const MODEL = "llama3-groq-8b-8192-tool-use-preview";
+const MODEL = "llama-3.1-8b-instant";
 
 // Common aliases to normalize without LLM call (fast path)
 const ALIAS_MAP: Record<string, string> = {

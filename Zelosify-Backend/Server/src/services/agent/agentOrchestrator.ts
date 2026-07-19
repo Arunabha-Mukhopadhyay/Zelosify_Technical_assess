@@ -30,7 +30,7 @@ import { TOOL_NAMES } from "./toolRegistry.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const ORCHESTRATOR_MODEL = "llama3-groq-70b-8192-tool-use-preview";
+const ORCHESTRATOR_MODEL = "llama-3.1-8b-instant";
 const AGENT_VERSION = "1.0.0";
 const MAX_TOOL_ROUNDS = 8;
 const MAX_RETRIES = 3;
@@ -78,23 +78,8 @@ const TOOL_DEFINITIONS = [
         "Extract structured feature vector from a parsed resume relative to a job opening. Use this after resume parsing to understand candidate strengths.",
       parameters: {
         type: "object",
-        properties: {
-          rawText: { type: "string", description: "Sanitized resume raw text" },
-          skills: {
-            type: "array",
-            items: { type: "string" },
-            description: "Skills already detected from heuristics",
-          },
-          experienceYears: {
-            type: "number",
-            description: "Experience years detected from heuristics",
-          },
-          location: {
-            type: "string",
-            description: "Candidate location from heuristics",
-          },
-        },
-        required: ["rawText"],
+        properties: {},
+        required: [],
       },
     },
   },
@@ -516,8 +501,11 @@ export async function runAgentOrchestrator(input: AgentInput): Promise<AgentOutp
     try {
       const result = await runAgentLoop(input, startTime);
       return result;
-    } catch (err: unknown) {
-      lastError = err instanceof Error ? err : new Error(String(err));
+    } catch (error: any) {
+      if (error.response) {
+        console.error("[Groq] API Error Response:", JSON.stringify(error.response.data, null, 2));
+      }
+      lastError = error instanceof Error ? error : new Error(String(error));
 
       logger.warn("[Orchestrator] Attempt failed", {
         attempt,
