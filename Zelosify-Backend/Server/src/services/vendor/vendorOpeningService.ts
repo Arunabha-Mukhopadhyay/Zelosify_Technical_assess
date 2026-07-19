@@ -1,5 +1,6 @@
 import prisma from "../../config/prisma/prisma.js";
 import { createStorageService } from "../storage/storageFactory.js";
+import { triggerRecommendationForProfile } from '../agent/recommendationService.js';
 import {
   ProfileFileInput,
   SubmittedProfileInput,
@@ -186,7 +187,7 @@ export class VendorOpeningService {
       throw new VendorOpeningError(400, "Invalid profile storage key");
     }
 
-    return prisma.$transaction(async (tx) => {
+    const createdProfiles = await prisma.$transaction(async (tx) => {
       const createdProfiles = [];
 
       for (const profile of profiles) {
@@ -214,6 +215,15 @@ export class VendorOpeningService {
 
       return createdProfiles;
     });
+
+    // Fire-and-forget: trigger AI recommendation asynchronously
+    setImmediate(() => {
+      for (const profile of createdProfiles) {
+        triggerRecommendationForProfile(profile.id, openingId).catch(() => {});
+      }
+    });
+
+    return createdProfiles;
   }
 
   async softDeleteProfile(

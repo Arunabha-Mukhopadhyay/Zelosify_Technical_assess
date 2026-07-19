@@ -49,6 +49,16 @@ const getOverviewItemsByRole = (role) => {
         },
       ];
 
+    // For HIRING_MANAGER
+    case 'HIRING_MANAGER':
+      return [
+        {
+          title: 'Openings',
+          href: '/hiring-manager/openings',
+          icon: BriefcaseBusiness,
+        },
+      ];
+
     default:
       return [];
   }

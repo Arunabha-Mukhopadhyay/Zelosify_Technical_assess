@@ -1,31 +1,10 @@
-import { Router, type RequestHandler } from "express";
-import { authenticateUser } from "../../middlewares/auth/authenticateMiddleware.js";
-import { authorizeRole } from "../../middlewares/auth/authorizeMiddleware.js";
-import { fetchData } from "../../controllers/controllers.js";
+import express from 'express';
+import hiringManagerOpeningRoutes from './hiringManagerOpeningRoutes.js';
+import hiringManagerProfileRoutes from './hiringManagerProfileRoutes.js';
 
-const router = Router();
+const router = express.Router();
 
-/**
- * =============================================================================
- * HIRING MANAGER ROUTES - VACANCY MANAGEMENT
- * =============================================================================
- */
-
-/**
- * GET /api/v1/hiring-manager
- * @requires HIRING_MANAGER role
- */
-router.get(
-  "/",
-  authenticateUser as RequestHandler,
-  authorizeRole("HIRING_MANAGER") as RequestHandler,
-  (async (req, res, next) => {
-    try {
-      await fetchData(req as any, res);
-    } catch (error) {
-      next(error);
-    }
-  }) as RequestHandler
-);
+router.use('/openings', hiringManagerOpeningRoutes);
+router.use('/profiles', hiringManagerProfileRoutes);
 
 export default router;
