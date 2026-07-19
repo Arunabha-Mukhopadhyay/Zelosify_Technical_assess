@@ -17,7 +17,8 @@ export async function fetchHiringManagerOpenings(req: AuthenticatedRequest, res:
   try {
     const managerId = req.user?.id;
     if (!managerId) { res.status(401).json({ message: 'Authenticated user required' }); return; }
-    const data = await hiringManagerService.listOwnOpenings(managerId);
+    const { page, limit } = req.query;
+    const data = await hiringManagerService.listOwnOpenings(managerId, page, limit);
     res.status(200).json({ message: 'Openings fetched', data });
   } catch (error) {
     handleError(error, res);

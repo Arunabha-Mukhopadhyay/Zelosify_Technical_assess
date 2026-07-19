@@ -13,12 +13,14 @@ const mockPrismaFindMany = vi.fn();
 const mockPrismaFindFirst = vi.fn();
 const mockPrismaUpdate = vi.fn();
 const mockPrismaTransaction = vi.fn();
+const mockPrismaCount = vi.fn();
 
 vi.mock("../../config/prisma/prisma.js", () => ({
   default: {
     opening: {
       findUnique: (...args: unknown[]) => mockPrismaFindUnique(...args),
       findMany: (...args: unknown[]) => mockPrismaFindMany(...args),
+      count: (...args: unknown[]) => mockPrismaCount(...args),
     },
     hiringProfile: {
       findMany: (...args: unknown[]) => mockPrismaFindMany(...args),
@@ -80,8 +82,9 @@ describe("Tenant Isolation — Hiring Manager Service", () => {
 
   // ── listOwnOpenings ──────────────────────────────────────────────────────────
   it("listOwnOpenings queries only the requesting manager's openings", async () => {
-    mockPrismaFindMany.mockResolvedValue([
-      { ...openingOwnedByManagerA, hiringProfiles: [] },
+    mockPrismaTransaction.mockResolvedValue([
+      [{ ...openingOwnedByManagerA, hiringProfiles: [] }], // openings
+      1, // count
     ]);
 
     await service.listOwnOpenings(MANAGER_A_ID);
@@ -95,10 +98,14 @@ describe("Tenant Isolation — Hiring Manager Service", () => {
 
   it("listOwnOpenings does NOT include openings from other managers", async () => {
     // Mock returns empty — simulates DB filtering out Manager B's openings
-    mockPrismaFindMany.mockResolvedValue([]);
+    mockPrismaTransaction.mockResolvedValue([
+      [], // openings
+      0, // count
+    ]);
 
     const result = await service.listOwnOpenings(MANAGER_B_ID);
-    expect(result).toHaveLength(0);
+    expect(result.items).toHaveLength(0);
+    expect(result.pagination.total).toBe(0);
   });
 
   // ── listProfilesForOpening ───────────────────────────────────────────────────

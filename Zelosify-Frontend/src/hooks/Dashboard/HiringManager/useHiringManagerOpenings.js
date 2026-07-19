@@ -2,16 +2,24 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getHiringManagerOpenings, getHiringManagerOpeningProfiles, shortlistProfile, rejectProfile } from '@/utils/Dashboard/HiringManager/hiringManagerApi';
 
-export function useHiringManagerOpenings() {
+export function useHiringManagerOpenings(initialPage = 1) {
   const [openings, setOpenings] = useState([]);
+  const [pagination, setPagination] = useState({
+    page: initialPage,
+    limit: 10,
+    total: 0,
+    totalPages: 1,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const load = useCallback(async () => {
+  const loadOpenings = useCallback(async (page) => {
     try {
-      setLoading(true); setError('');
-      const data = await getHiringManagerOpenings();
-      setOpenings(data || []);
+      setLoading(true);
+      setError('');
+      const data = await getHiringManagerOpenings({ page, limit: 10 });
+      setOpenings(data.items || []);
+      setPagination(data.pagination);
     } catch (err) {
       setError(err?.response?.data?.message || err.message || 'Failed to load openings');
     } finally {
@@ -19,10 +27,11 @@ export function useHiringManagerOpenings() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadOpenings(initialPage); }, [initialPage, loadOpenings]);
 
-  return { openings, loading, error, reload: load };
+  return { openings, pagination, loading, error, loadOpenings };
 }
+
 
 export function useHiringManagerOpeningDetails(openingId) {
   const [data, setData] = useState(null); // { opening, profiles }

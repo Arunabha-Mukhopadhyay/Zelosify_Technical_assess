@@ -1,5 +1,6 @@
 import prisma from '../../config/prisma/prisma.js';
 import { logger } from '../../utils/logger/structuredLogger.js';
+import { parsePagination } from '../../helpers/vendorOpeningValidation.js';
 
 export class HiringManagerError extends Error {
   statusCode: number;
@@ -24,27 +25,35 @@ function getFilenameFromS3Key(s3Key: string): string {
 }
 
 export class HiringManagerService {
-  async listOwnOpenings(managerId: string) {
-    const openings = await prisma.opening.findMany({
-      where: { hiringManagerId: managerId },
-      orderBy: { postedDate: 'desc' },
-      select: {
-        id: true,
-        title: true,
-        location: true,
-        contractType: true,
-        postedDate: true,
-        status: true,
-        experienceMin: true,
-        experienceMax: true,
-        hiringProfiles: {
-          where: { isDeleted: false },
-          select: { status: true },
-        },
-      },
-    });
+  async listOwnOpenings(managerId: string, pageValue: unknown = 1, limitValue: unknown = 10) {
+    const pagination = parsePagination(pageValue, limitValue);
+    const where = { hiringManagerId: managerId };
 
-    return openings.map((opening) => {
+    const [openings, total] = await prisma.$transaction([
+      prisma.opening.findMany({
+        where,
+        orderBy: { postedDate: 'desc' },
+        skip: pagination.skip,
+        take: pagination.limit,
+        select: {
+          id: true,
+          title: true,
+          location: true,
+          contractType: true,
+          postedDate: true,
+          status: true,
+          experienceMin: true,
+          experienceMax: true,
+          hiringProfiles: {
+            where: { isDeleted: false },
+            select: { status: true },
+          },
+        },
+      }),
+      prisma.opening.count({ where }),
+    ]);
+
+    const items = openings.map((opening) => {
       const profiles = opening.hiringProfiles;
       return {
         ...opening,
@@ -55,6 +64,16 @@ export class HiringManagerService {
         rejectedCount: profiles.filter(p => p.status === 'REJECTED').length,
       };
     });
+
+    return {
+      items,
+      pagination: {
+        page: pagination.page,
+        limit: pagination.limit,
+        total,
+        totalPages: Math.ceil(total / pagination.limit),
+      },
+    };
   }
 
   async listProfilesForOpening(managerId: string, openingId: string) {

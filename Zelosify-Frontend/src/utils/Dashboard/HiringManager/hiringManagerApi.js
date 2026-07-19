@@ -1,7 +1,9 @@
 import axiosInstance from '@/utils/Axios/AxiosInstance';
 
-export async function getHiringManagerOpenings() {
-  const response = await axiosInstance.get('/hiring-manager/openings');
+export async function getHiringManagerOpenings({ page = 1, limit = 10 } = {}) {
+  const response = await axiosInstance.get('/hiring-manager/openings', {
+    params: { page, limit },
+  });
   return response.data.data;
 }
 
