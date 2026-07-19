@@ -50,7 +50,7 @@ function sanitizeResumeText(text: string): string {
     .replace(/<\|.*?\|>/g, "[REDACTED]")
     .replace(/\[INST\]|\[\/INST\]/g, "[REDACTED]")
     .replace(/###\s*(System|Instruction)/gi, "[REDACTED]")
-    .substring(0, 8000); // hard cap to avoid token overflow
+    .substring(0, 3500); // hard cap to avoid token overflow
 }
 
 // ─── PDF Parser ───────────────────────────────────────────────────────────────

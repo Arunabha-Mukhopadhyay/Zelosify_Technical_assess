@@ -34,7 +34,7 @@ const ORCHESTRATOR_MODEL = "llama-3.1-8b-instant";
 const AGENT_VERSION = "1.0.0";
 const MAX_TOOL_ROUNDS = 8;
 const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 150;
+const RETRY_DELAY_MS = 2000;
 
 // ─── Input / Output ───────────────────────────────────────────────────────────
 export interface AgentInput {
