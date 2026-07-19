@@ -3,7 +3,29 @@ import { logger } from '../../utils/logger/structuredLogger.js';
 import { runAgentOrchestrator } from './agentOrchestrator.js';
 import { validateAgentOutput } from './schemaValidator.js';
 
-const AGENT_VERSION = '1.0.0-stub';
+const AGENT_VERSION = '1.0.0';
+
+// ─── Skill keywords extracted from opening title/description (deterministic) ──
+const SKILL_KEYWORDS = [
+  'javascript', 'typescript', 'python', 'java', 'c++', 'c#', 'go', 'rust',
+  'react', 'next.js', 'vue', 'angular', 'node.js', 'express', 'fastapi',
+  'django', 'flask', 'spring', 'aws', 'azure', 'gcp', 'docker', 'kubernetes',
+  'postgresql', 'mysql', 'mongodb', 'redis', 'graphql', 'rest', 'grpc',
+  'git', 'ci/cd', 'jenkins', 'terraform', 'linux', 'sql', 'nosql',
+  'machine learning', 'deep learning', 'tensorflow', 'pytorch', 'pandas',
+  'numpy', 'spark', 'kafka', 'rabbitmq', 'elasticsearch', 'prisma',
+  'backend', 'frontend', 'devops', 'cloud', 'security', 'data', 'mobile',
+  'api', 'microservices', 'agile', 'scrum',
+];
+
+/**
+ * Extract required skills from opening title + description (heuristic, no LLM call).
+ * This avoids adding a DB field while still giving the scoring engine meaningful signal.
+ */
+function extractRequiredSkillsFromOpening(title: string, description: string | null): string[] {
+  const text = `${title} ${description ?? ''}`.toLowerCase();
+  return SKILL_KEYWORDS.filter((kw) => text.includes(kw));
+}
 
 export async function triggerRecommendationForProfile(
   profileId: number,
@@ -17,7 +39,7 @@ export async function triggerRecommendationForProfile(
     // Fetch profile and opening data
     const profile = await prisma.hiringProfile.findUnique({
       where: { id: profileId },
-      select: { id: true, s3Key: true, openingId: true },
+      select: { id: true, s3Key: true, openingId: true, recommendedAt: true },
     });
 
     if (!profile) {
@@ -25,9 +47,27 @@ export async function triggerRecommendationForProfile(
       return;
     }
 
+    // ── IDEMPOTENCY CHECK ──────────────────────────────────────────────────────
+    // Skip if recommendation already ran for this profile (supports safe re-runs)
+    if (profile.recommendedAt !== null) {
+      logger.info('[RecommendationService] Recommendation already exists — skipping re-run', {
+        profileId,
+        recommendedAt: profile.recommendedAt,
+      });
+      return;
+    }
+
     const opening = await prisma.opening.findUnique({
       where: { id: openingId },
-      select: { id: true, title: true, description: true, location: true, contractType: true, experienceMin: true, experienceMax: true },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        location: true,
+        contractType: true,
+        experienceMin: true,
+        experienceMax: true,
+      },
     });
 
     if (!opening) {
@@ -35,9 +75,21 @@ export async function triggerRecommendationForProfile(
       return;
     }
 
+    // Extract required skills from opening title + description (heuristic)
+    const requiredSkills = extractRequiredSkillsFromOpening(
+      opening.title,
+      opening.description ?? null
+    );
+
+    logger.info('[RecommendationService] Extracted required skills from opening', {
+      profileId,
+      openingTitle: opening.title,
+      requiredSkills,
+    });
+
     const parsingStart = Date.now();
 
-    // Run the agent orchestrator
+    // Run the agent orchestrator (full LLM tool-calling pipeline)
     const rawOutput = await runAgentOrchestrator({
       profileId,
       s3Key: profile.s3Key,
@@ -48,7 +100,7 @@ export async function triggerRecommendationForProfile(
       openingContractType: opening.contractType ?? null,
       experienceMin: opening.experienceMin,
       experienceMax: opening.experienceMax ?? null,
-      requiredSkills: [], // TODO: extract from opening description in LLM stage
+      requiredSkills,
     });
 
     const agentOutput = validateAgentOutput(rawOutput);
@@ -64,7 +116,7 @@ export async function triggerRecommendationForProfile(
       recommended: agentOutput.recommended,
     });
 
-    // Persist result in a transaction
+    // Persist result in ACID transaction (no partial writes)
     await prisma.$transaction(async (tx) => {
       await tx.hiringProfile.update({
         where: { id: profileId },
@@ -83,17 +135,6 @@ export async function triggerRecommendationForProfile(
   } catch (err: unknown) {
     const latencyMs = Date.now() - startTime;
     const message = err instanceof Error ? err.message : String(err);
-
-    // During stub phase, NOT_IMPLEMENTED is expected — log as warn, not error
-    if (message.includes('NOT_IMPLEMENTED')) {
-      logger.warn('[RecommendationService] Agent not yet implemented (LLM stage pending)', {
-        profileId,
-        openingId,
-        latencyMs,
-        note: message,
-      });
-      return;
-    }
 
     logger.error('[RecommendationService] Agent failed', {
       profileId,

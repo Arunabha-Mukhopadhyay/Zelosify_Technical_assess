@@ -35,12 +35,12 @@ vi.mock("../../config/prisma/prisma.js", () => ({
 }));
 
 // Mock AWS Storage Service (presign + S3 access)
-const mockPresignUrl = vi.fn();
+const mockGetUploadURL = vi.fn();
 const mockGetS3Client = vi.fn();
 
 vi.mock("../../services/storage/aws/awsStorageService.js", () => ({
   AwsStorageService: vi.fn().mockImplementation(() => ({
-    generatePresignedPutUrl: mockPresignUrl,
+    getUploadURL: mockGetUploadURL,
     s3Client: { send: vi.fn() },
     bucket: "zelosify-recruit-files",
   })),
@@ -135,20 +135,20 @@ describe("Integration — Full Flow: Presign → Submit → Recommend → Shortl
   it("Step 1: generates presigned PUT URL for profile upload", async () => {
     const presignedUrl = `https://zelosify-recruit-files.s3.us-east-1.amazonaws.com/${TENANT_ID}/${OPENING_ID}/1720000000000_arunabha_mukhopadhyay.pdf?X-Amz-Signature=abc`;
 
-    mockPresignUrl.mockResolvedValue(presignedUrl);
+    mockGetUploadURL.mockResolvedValue(presignedUrl);
 
     // Simulate what the vendor controller does (call storage service)
     const { AwsStorageService } = await import(
       "../../services/storage/aws/awsStorageService.js"
     );
     const storageService = new AwsStorageService();
-    const url = await storageService.generatePresignedPutUrl(
+    const url = await storageService.getUploadURL(
       `${TENANT_ID}/${OPENING_ID}/1720000000000_arunabha_mukhopadhyay.pdf`,
       "application/pdf"
     );
 
     expect(url).toBe(presignedUrl);
-    expect(mockPresignUrl).toHaveBeenCalledOnce();
+    expect(mockGetUploadURL).toHaveBeenCalledOnce();
   });
 
   // ── Step 2: Profile Submission creates DB records in a transaction ───────────
